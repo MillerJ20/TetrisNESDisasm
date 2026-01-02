@@ -2,7 +2,7 @@
 
 .include "constants.asm"
 
-tmp1            := $0000
+tmp1            := $0000                              ; test comment
 tmp2            := $0001
 tmp3            := $0002
 tmpBulkCopyToPpuReturnAddr:= $0005
