@@ -1527,76 +1527,76 @@ rotationTable:
         .byte   iHoriz, iHoriz ; from iVert
         .byte   iVert, iVert   ; from iHoriz
 
-drop_tetrimino:
-        lda     autorepeatY
-        bpl     @notBeginningOfGame
+drop_tetrimino:                               ; At startup, autoRepeatY is set to -96 
+        lda     autorepeatY                   ; Load autorepeatY into a
+        bpl     @notBeginningOfGame           ; If autorepeatY >= 0 goto notBeginningOfGame
         lda     newlyPressedButtons
         and     #BUTTON_DOWN
-        beq     @incrementAutorepeatY
-        lda     #$00
+        beq     @incrementAutorepeatY         ; if down not pressed, increment autorepeatY (this is the 1.6 second delay at start of game)
+        lda     #$00                          ; Down is pressed, bypass initial delay (set to 0)
         sta     autorepeatY
 @notBeginningOfGame:
-        bne     @autorepeating
+        bne     @autorepeating                ; If autorepeatY is not 0 (greater than), go to autorepeating, otherwise playing
 @playing:
-        lda     heldButtons
-        and     #BUTTON_LEFT+BUTTON_RIGHT
-        bne     @lookupDropSpeed
-        lda     newlyPressedButtons
-        and     #BUTTON_DPAD
-        cmp     #BUTTON_DOWN
-        bne     @lookupDropSpeed
+        lda     heldButtons                   ; Autorepeat is 0, check gamepad
+        and     #BUTTON_LEFT+BUTTON_RIGHT     ; Check if left or right pressed  
+        bne     @lookupDropSpeed              ; If pressed, find lookup speed based on table
+        lda     newlyPressedButtons           ; Only increment autorepeatY if down is a NEW button press (not held) 
+        and     #BUTTON_DPAD                  ; This prevents accidental soft drop activation if down is held too long  
+        cmp     #BUTTON_DOWN                  ; After a piece has been set in place 
+        bne     @lookupDropSpeed              ; Down isn't only thing pressed, regular drop speed 
         lda     #$01
-        sta     autorepeatY
+        sta     autorepeatY                   ; Down only press, autorepeatY is 1
         jmp     @lookupDropSpeed
 
 @autorepeating:
-        lda     heldButtons
-        and     #BUTTON_DPAD
+        lda     heldButtons                   ; Load results of gamepad poll
+        and     #BUTTON_DPAD                  ; Check if only down is pressed  
         cmp     #BUTTON_DOWN
-        beq     @downPressed
-        lda     #$00
+        beq     @downPressed                  
+        lda     #$00                          ; Down is not pressed, reset autorepeat and points for holding down to 0
         sta     autorepeatY
         sta     holdDownPoints
-        jmp     @lookupDropSpeed
+        jmp     @lookupDropSpeed              ; Identify drop speed via table depending on label
 
 @downPressed:
-        inc     autorepeatY
+        inc     autorepeatY                   ; Down is only button pressed, increment autorepeatY
         lda     autorepeatY
-        cmp     #$03
-        bcc     @lookupDropSpeed
-        lda     #$01
-        sta     autorepeatY
-        inc     holdDownPoints
-@drop:  lda     #$00
+        cmp     #$03                          ; Three frame delay before starting soft drop
+        bcc     @lookupDropSpeed              ; If autorepeatY is less than 3, lookupDropSpeed
+        lda     #$01                            
+        sta     autorepeatY                   ; Else set autorepeatY to 1 
+        inc     holdDownPoints                ; Increment points
+@drop:  lda     #$00                          ; Reset fall timer to 0 
         sta     fallTimer
-        lda     tetriminoY
-        sta     originalY
-        inc     tetriminoY
-        jsr     isPositionValid
-        beq     @ret
-        lda     originalY
+        lda     tetriminoY                    ; Grab current piece y value  
+        sta     originalY                     ; store value before drop 
+        inc     tetriminoY                    ; drop the piece 
+        jsr     isPositionValid               ; Check that drop location is valid 
+        beq     @ret                          ; if valid, return  
+        lda     originalY                     ; else grab originalY and use that as dropped location  
         sta     tetriminoY
         lda     #$02
-        sta     playState
-        jsr     updatePlayfield
+        sta     playState                     ; set playstate to 2 ()
+        jsr     updatePlayfield               ; updatePlayfield to include newly set piece
 @ret:   rts
 
 @lookupDropSpeed:
-        lda     #$01
-        ldx     levelNumber
-        cpx     #$1D
-        bcs     @noTableLookup
-        lda     framesPerDropTable,x
+        lda     #$01                          ; Set speed to 01 as placeholder
+        ldx     levelNumber                   ; Grab current level number 
+        cpx     #$1D                          ; Compare it to 29 (max level)
+        bcs     @noTableLookup                ; If levelNumber is greater than or eqaul to 29 jump to noTableLookup
+        lda     framesPerDropTable,x          ; levelNumber guaranteed to be in table, pull drop speed from table 
 @noTableLookup:
-        sta     dropSpeed
-        lda     fallTimer
-        cmp     dropSpeed
+        sta     dropSpeed                     ; set speed from table to dropSpeed 
+        lda     fallTimer                     ; grab the fallTimer  
+        cmp     dropSpeed                     ; If fallTimer is greater than or equal to dropSpeed, drop piece  
         bpl     @drop
-        jmp     @ret
+        jmp     @ret                          ; else return
 
 @incrementAutorepeatY:
-        inc     autorepeatY
-        jmp     @ret
+        inc     autorepeatY                   ; Used at startup of game to allow for first piece to have a 1.6 second 
+        jmp     @ret                          ; delay before is first falls (bypassed by down press)
 
 framesPerDropTable:
 .if PAL = 1
@@ -2390,69 +2390,69 @@ sprite55Penguin2:
         .byte   $00,$DD,$21,$00,$00,$DE,$21,$08
         .byte   $FF
 isPositionValid:
-        lda     tetriminoY
-        asl     a
-        sta     generalCounter
-        asl     a
-        asl     a
-        clc
-        adc     generalCounter
-        adc     tetriminoX
-        sta     generalCounter
-        lda     currentPiece
-        asl     a
-        asl     a
-        sta     generalCounter2
-        asl     a
-        clc
-        adc     generalCounter2
-        tax
-        ldy     #$00
-        lda     #$04
-        sta     generalCounter3
+        lda     tetriminoY             ; Load current tY into a
+        asl     a                      ; multiply tY by 2
+        sta     generalCounter         ; load tY * 2 into generalCounter
+        asl     a                      ; tY * 4 
+        asl     a                      ; tY * 8 
+        clc                            ; clear the carry flag  
+        adc     generalCounter         ; a = (tY * 8) + (tY * 2) = tY * 10    
+        adc     tetriminoX             ; a = (tY * 10) + tX 
+        sta     generalCounter         ; generalCounter = (tY * 10) + tX 
+        lda     currentPiece           ; a = current piece (orientationId)
+        asl     a                      ; current * 2  
+        asl     a                      ; current * 4 
+        sta     generalCounter2        ; generalCounter2 = a = currentPiece * 4 
+        asl     a                      ; currentPiece * 8 
+        clc                            ; clear carry
+        adc     generalCounter2        ; a = (currentPiece * 8) + (currentPiece * 4) = currentPiece * 12 
+        tax                            ; index = currentPiece * 12 
+        ldy     #$00                   ; y = 0 
+        lda     #$04                   ; a = 4 
+        sta     generalCounter3        ; generalCounter3 = 4  
 ; Checks one square within the tetrimino
 @checkSquare:
-        lda     orientationTable,x
+        lda     orientationTable,x     ; squareYOffset = orientationTable[index]
         clc
-        adc     tetriminoY
-        adc     #$02
-        cmp     #$16
-        bcs     @invalid
-        lda     orientationTable,x
-        asl     a
-        sta     generalCounter4
-        asl     a
-        asl     a
+        adc     tetriminoY             ; cellY = squareYOffset + tetriminoY
+        adc     #$02                   ; add 2 to account for 2 row buffer at top of screen
+        cmp     #$16                   ; compare cellY with 22
+        bcs     @invalid               ; if greater than or equal to 22, y is invalid
+        lda     orientationTable,x     ; load squareYOffset back into a
+        asl     a                      ; a = squareYOffset * 2 
+        sta     generalCounter4        ; generalCounter4 = squareYOffset * 2 
+        asl     a                      ; a = squareYOffset * 4 
+        asl     a                      ; a = squareYOffset * 8 
         clc
-        adc     generalCounter4
+        adc     generalCounter4        ; a = squareY * 10 
         clc
-        adc     generalCounter
-        sta     selectingLevelOrHeight
+        adc     generalCounter         ; a = (squareY * 10) row + (tY * 10 + tX) currentPiecePosition
+        sta     selectingLevelOrHeight ; playFieldIndex = a
         inx
-        inx
-        lda     orientationTable,x
+        inx                            ; increment index twice to grab x offset
+        lda     orientationTable,x     ; grab x offset
         clc
-        adc     selectingLevelOrHeight
-        tay
-        lda     (playfieldAddr),y
-        cmp     #tileEmpty
-        bcc     @invalid
-        lda     orientationTable,x
+        adc     selectingLevelOrHeight ; add x offset to playFieldIndex
+        tay                            ; store playFieldIndex in y register 
+        lda     (playfieldAddr),y      ; playfield[playFieldIndex]
+        cmp     #tileEmpty             ; check if tile is empty 
+        bcc     @invalid               ; tile not empty
+        lda     orientationTable,x     ; grab x offset 
         clc
-        adc     tetriminoX
-        cmp     #$0A
-        bcs     @invalid
-        inx
-        dec     generalCounter3
-        bne     @checkSquare
+        adc     tetriminoX             ; add offset to base x 
+        cmp     #$0A                   ; check the result is from 0-10
+        bcs     @invalid               ; invalid if out of bounds
+        inx                            ; set index to next squareYOffset
+        dec     generalCounter3        ; decrement loop counter 
+        bne     @checkSquare           ; if > 0, continue looping 
         lda     #$00
-        sta     generalCounter
-        rts
+        sta     generalCounter         ; reset generalCounter, set zero flag = 1 (for caller)
+        rts                            ; return with set zero flag (valid) 
 
 @invalid:
-        lda     #$FF
-        sta     generalCounter
-        rts
+        lda     #$FF                   ; clear zero flag
+        sta     generalCounter         ; reset generalCounter 
+        rts                            ; return with cleared zero flag (invalid)
 
 render_mode_play_and_demo:
         lda     player1_playState
@@ -2894,9 +2894,9 @@ noop_disabledVramRowIncr:
 @ret:   rts
 
 playState_spawnNextTetrimino:
-        lda     vramRow
-        cmp     #$20
-        bmi     @ret
+        lda     vramRow                     ; Load row piece is in from vram
+        cmp     #$20                        ; 20 maximum rows
+        bmi     @ret                        ; 
         lda     numberOfPlayers
         cmp     #$01
         beq     @spawnPiece
@@ -5633,44 +5633,44 @@ LAC67:  ldx     tmp2
 
 ; reg a: value; reg x: start page; reg y: end page (inclusive)
 memset_page:
-        pha
-        txa
-        sty     tmp2
-        clc
-        sbc     tmp2
-        tax
-        pla
-        ldy     #$00
+        pha                     ; Push value to write on the stack  
+        txa                     ; a = start 
+        sty     tmp2            ; tmp2 = end 
+        clc                     ; Clear carry 
+        sbc     tmp2            ; start - end - 1 (-1 as a result of the clc, used in loop below)
+        tax                     ; x = start - end - 1 
+        pla                     ; a = value to write
+        ldy     #$00            ; y(used for offset) starts at 0
         sty     tmp1
 @setByte:
-        sta     (tmp1),y
-        dey
-        bne     @setByte
-        dec     tmp2
-        inx
-        bne     @setByte
-        rts
+        sta     (tmp1),y        ; indirect addressing: tmp1(lo) = 00, tmp2(hi) = end + offset 
+        dey                     ; y wraps around and counts back up to 0
+        bne     @setByte        ; on second 0 hit, break loop (1 wasted cycle)
+        dec     tmp2            ; move to next page 
+        inx                     ; inc page counter  
+        bne     @setByte        ; start filling next page 
+        rts                     ; all pages filled if x = 0, done setting memory
 
 switch_s_plus_2a:
-        asl     a
-        tay
-        iny
-        pla
-        sta     tmp1
-        pla
-        sta     tmp2
-        lda     (tmp1),y
-        tax
-        iny
-        lda     (tmp1),y
-        sta     tmp2
-        stx     tmp1
-        jmp     (tmp1)
+        asl     a               ; multiply gameMode by 2 
+        tay                     ; y = gameMode * 2 
+        iny                     ; y = y + 1 (account for jsr)
+        pla                     ; pull lo byte of return address from the stack (placed there by jsr)
+        sta     tmp1            ; tmp1 = lo byte
+        pla                     ; pull hi byte of return address
+        sta     tmp2            ; tmp2 = hi byte
+        lda     (tmp1),y        ; loading the lo byte of the targeted address (return + offset)
+        tax                     ; store target lo byte 
+        iny                     ; increment y (hi byte offset)
+        lda     (tmp1),y        ; grab hi byte of target  
+        sta     tmp2            ; tmp2 = hi byte 
+        stx     tmp1            ; tmp1 = target lo byte   
+        jmp     (tmp1)          ; indirect addressing treats tmp1 as lo byte and tmp1+1 (tmp2) as hi byte
 
-.if NWC <> 1
-        sei
+.if NWC <> 1                    
+        sei                     
 .endif
-        inc     initRam
+        inc     initRam          
 .if NWC = 1
         lda     #$00
 .else
